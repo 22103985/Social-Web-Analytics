@@ -2,8 +2,8 @@
 
 ## Group members
 
-Student:          and Student ID:
-Student:          and Student ID:
+Student: Berika Khawas and Student ID: 22216425
+Student: Nhat Quyen Lam and Student ID: 22103985
 Student:          and Student ID:
 
 ## Project Description
