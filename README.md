@@ -6,7 +6,7 @@ Student: Berika Khawas and Student ID: 22216425
 
 Student: Nhat Quyen Lam and Student ID: 22103985
 
-Student:          and Student ID:
+Student: Andrew Khuu and Student ID: 22097466
 
 ## Project Description
 This project analyses the relationship between social media usage, mental health and academic performance among students. 
