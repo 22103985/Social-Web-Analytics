@@ -1,0 +1,512 @@
+---
+title: "Exploring the Relationship Between Social Media Usage, Mental Health and Academic Performance Among Students"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+# 1. Project Overview
+
+Our project aims to explore how student’s social media habits relate to their mental health, sleep and academic performance. We aim to identify patterns in social media usage and review whether students with different habits will also have different outcomes in these areas.
+
+We will use “Impact of Social Media on Life” from Kaggle as it includes data about students daily social media usage, main platforms, daily hours, late night usage, sleep and GPA. 
+
+Research questions:
+
+1.	What social media usage patterns are most common among students in this dataset?
+2.	Are the primary social media platform used by students associated with late-night media usage?
+3.	How does daily social media usage relate to sleep duration, mental health and academic performance?
+4. Can students be grouped into profiles based on their social media usage, sleep duration, stress, mental health scores and academic performance?
+
+
+# 2.1 Data Collection
+
+We downloaded the "Impact of Social Media on Life" dataset from Kaggle as a CSV file and imported it into R. 
+
+Source: https://www.kaggle.com/datasets/harishyadav0506/impact-of-social-media-on-life
+
+Firstly we checked the dataset's structure and column names and import the original data raw. This dataset gives us 16 variables with 4500 lines.
+
+```{r import-data, echo=FALSE}
+rawData = read.csv(
+  "social_media_impact_on_life.csv",
+  as.is = TRUE,
+  na.strings =c("","NA"),
+  strip.white = TRUE
+)
+
+socialMedia = rawData
+
+dim(socialMedia)
+str(socialMedia)
+
+```
+
+```{r data-checks, echo=FALSE}
+
+missingValues = colSums(is.na(socialMedia))
+missingValues[missingValues > 0]
+duplicateCount = sum(duplicated(socialMedia))
+duplicateCount
+
+socialMedia = socialMedia[
+  !duplicated(socialMedia),
+]
+
+sum(is.na(socialMedia$Student_ID))
+studentIDs = socialMedia$Student_ID[
+  !is.na(socialMedia$Student_ID)
+]
+sum(duplicated(studentIDs))
+```
+We then checked for any missing values and exact duplicate rows. Missing values were retained and excluded only from analyses that needed those variables.
+
+There were 46 missing stress scores and 85 missing GPA values. No exact duplicate rows or repeated student IDs were found.
+
+```{r save-prepped-data, echo=FALSE}
+save(
+  socialMedia,
+  file = "Social_media_prepared.RData"
+)
+# For later use load("Social_media_prepared.RData")
+```
+
+# 2.2 Hypothesis Testing
+
+
+**Are the primary social media platform used by students associated with late-night media usage?**
+
+
+This question allows us to compare the students’ usages behaviours across the different social media platforms. It will also contribute to the broader topic by looking into the late-night usage metric which we can compare alongside sleep and well being variables down the line in the investigation.
+
+
+```{r platform-late-ngiht-table}
+platformTable = table(socialMedia$Primary_Platform,socialMedia$Late_Night_Usage)
+
+platformTable
+```
+
+**Hypothesis**
+
+Null hypothesis (H0): Primary social media platform and late night social media usage are independent.
+
+Alternative hypotheseis (H1): Primary social media platform and late night social media usage are associated. 
+
+The chi square test of independence was used as both variables are categorical. The primary platform identifies the students main social media platform whilst laten night usage records true or false. This test will compare the observed counts with the counts we would expect if the variables were independent.
+
+
+```{r platform-chi-square, echo=FALSE}
+platformTest = chisq.test(platformTable)
+
+min(platformTest$expected)
+```
+
+The smallest expected count was `r round(min(platformTest$expected),2)`. The expected counts were above 5 which supports the use of the standard chi square approximation.
+
+```{r platform-late-night-plot, echo=FALSE, fig.height=5}
+platformTable = table(socialMedia$Primary_Platform,socialMedia$Late_Night_Usage)
+
+platformPercent = prop.table(platformTable, margin = 1) * 100
+
+par(mar = c(8, 4, 4, 2))
+
+barplot(
+  t(platformPercent),
+  beside = TRUE,
+  main = "Late Night Usage by Primary Platform",
+  ylab = "Percentage of students",
+  col = c("blue", "red"),
+  ylim = c(0, 100),
+  las = 2,
+  legend.text = colnames(platformTable),
+  args.legend = list(
+    x = "topright",
+    title = "Late night usage",
+    bty = "n"
+  )
+)
+```
+
+The chi-square statistic was`r round(as.numeric(platformTest$statistic), 3)`
+with `r as.numeric(platformTest$parameter)` degrees of freedom and a p-value of `r round(platformTest$p.value, 3)`.
+
+As the p-value was greater than 0.05 we do not reject the null hypothesis. There was insufficient evidence of an association between primary platform and late-night usage in this dataset.
+
+This does not prove that the variables are independent and it also does not tell us whether late-night usage is associated with sleep, mental health or academic performance which will require additional separate analysis.
+
+
+# 2.3 Text/Content Analysis and Visualization
+
+**Daily Social Media Usage** 
+
+We used a histogram to explore how daily social media usage can vary between the students. The average daily usage for social media was 5.3 hours and the media was 4.7 hours.
+
+```{r usage-summary}
+summary(socialMedia$Daily_Usage_Hours)
+```
+
+```{r daily-usage-histogram, echo=FALSE, fig.height=5}
+hist(
+  socialMedia$Daily_Usage_Hours,
+  breaks = 20,
+  main = "Daily Social Media usage",
+  xlab = "Hours",
+  ylab = "Number of students",
+  col ="blue",
+  border ="white"
+)
+```
+
+The distribution of the histogram is skewed to the right. This illustrates that the majority of students recorded lower or moderate usage whilst a smaller number recorded a much higher usage. These higher values explain why the mean is higher than the median.
+
+
+# 2.4 Clustering
+
+**Can students be grouped into profiles based on social media usage, sleep duration, stress, mental health scores and academic performance?**
+
+We used k-means clustering to explore whether students shared similar patterns in daily social media usage, sleep duration, stress, mental health index and GPA.These 5 numerical variables were selected as they connect usage habits with the outcomes explored in our topic. 
+
+```{r prepare-clustering, echo=FALSE}
+clusterData = socialMedia[, c(
+  "Daily_Usage_Hours",
+  "Sleep_Duration_Hours",
+  "Perceived_Stress_Score",
+  "Mental_Health_Index",
+  "Academic_Performance_GPA"
+)]
+
+clusterData = clusterData[
+  complete.cases(clusterData),
+]
+
+scaledData = scale(clusterData)
+
+nrow(clusterData)
+```
+
+After excluding records with missing values, 4369 students remained. We used scale() to subtract each variable's mean and divide by its standard deviation. This prevented variables with larger numerical scales such as mental heealth index from dominating the cluster
+
+K-means uses squared Euclidean distances to group observations around cluster centres. Applying it to the standardised measurements allowed differences across all five variables to contribute to the grouping.
+
+```{r clustering-elbow, echo=FALSE, fig.height=5}
+set.seed(3020)
+
+withinVariation = numeric(8)
+
+for (k in 1:8) {
+  model = kmeans(
+    scaledData,
+    centers = k,
+    nstart = 25,
+    iter.max = 100)
+  
+  withinVariation[k] = model$tot.withinss
+  }
+plot(
+  1:8,
+  withinVariation,
+  type = "b",
+  pch = 19,
+  col = "blue",
+  main = "",
+  xlab = "Number of clusters",
+  ylab = "Within cluster sum of squares"
+)
+
+```
+
+The curve shows a  bend around two to three clusters which is followed by smaller reductions. We selected three cluster to explore as the elbow did not establish one definitive answer.
+
+```{r student-kmeans, echo=FALSE}
+set.seed(3020)
+
+studentClusters = kmeans(
+  scaledData,
+  centers = 3,
+  nstart = 25,
+  iter.max = 100
+)
+
+table(studentClusters$cluster)
+```
+
+
+```{r cluster-profile-summary, echo=FALSE}
+clusterProfiles = aggregate(
+  clusterData,
+  by = list(Cluster = studentClusters$cluster),
+  FUN = mean
+)
+
+round(clusterProfiles[, c(
+  "Cluster",
+  "Daily_Usage_Hours",
+  "Sleep_Duration_Hours",
+  "Perceived_Stress_Score"
+)], 2)
+
+round(clusterProfiles[, c(
+  "Cluster",
+  "Mental_Health_Index",
+  "Academic_Performance_GPA"
+)], 2)
+```
+
+Cluster 1 contained 609 students and had the highest average daily usage at 10.12 hours. This group also had the shortest sleep duration at 4.90 hours, the highest stress score at 24.83, the lowest mental health index at 57.29 and the lowest GPA at 2.84.
+
+Cluster 2 was the largest group, with 1,978 students. It had the lowest average daily usage at 3.44 hours, the longest sleep duration at 7.57 hours and the lowest stress score at 8.39. It also had the highest mental health index at 89.59 and GPA at 3.70.
+
+Cluster 3 contained 1,782 students and fell between the other groups across all five measurements. Average daily usage was 5.72 hours, sleep duration was 6.35 hours, stress was 15.38, mental health index was 76.66 and GPA was 3.33.
+
+```{r student-cluster-plot, echo=FALSE, fig.height=5}
+clusterColours = c("red", "blue", "darkgreen")
+
+plot(
+  clusterData$Daily_Usage_Hours,
+  clusterData$Sleep_Duration_Hours,
+  col = adjustcolor(
+    clusterColours[studentClusters$cluster],
+    alpha.f = 0.4
+  ),
+  pch = 16,
+  cex = 0.6,
+  main = "Student Clusters: Usage and Sleep",
+  xlab = "Daily social media usage ",
+  ylab = "Sleep duration "
+)
+
+legend(
+  "topright",
+  legend = c("Cluster 1", "Cluster 2", "Cluster 3"),
+  col = clusterColours,
+  pch = 16,
+  bty = "n"
+)
+```
+
+The scatterplot shows daily usage and sleep duration with each point representing a student and colour indicating cluster membership. The higher usage profile generally appears towards short sleep durations while the lower usage profile appears towards longer sleep durations. There is a few that overlap. All variables were used to form the clusters so the two variable view display only part of their differences.
+
+These profiles patterns withing the dataset don't show that social media usage can cause difference in sleep, stress, mental health or GPA. The measurements helped to create the clusters so the differences between the groups aren't independant evidence of an effect.
+
+The results also depend on the selected variables, standardization and number of clusters. Correlated variables can give related patterns with greater influence and high or low can values can affect the cluster centres. 
+
+
+
+# 2.5 Network
+
+**How are students’ primary social media platforms and device types connected through their recorded usage?**
+
+We created a network to explore how students' main social media platform and device choice connect through shared usage categories. The nodes represent students, platforms and devices. Each student has on edge to their primary platform and another to their device type. 
+
+The network is undirected as the edges represent affiliations rather than directional actions. It is unweighted because each recorded relationship contributes one edge. This follows the edge list approach and the connections do not represent communication or friendship between students. 
+
+```{r prepare-network, echo=FALSE, results='hide', message=FALSE}
+library(igraph)
+
+networkData = socialMedia[, c(
+  "Student_ID",
+  "Primary_Platform",
+  "Device_Type"
+)]
+
+
+networkData = networkData[complete.cases(networkData), ]
+
+stopifnot(!anyDuplicated(networkData$Student_ID))
+
+students = paste0("Student_", networkData$Student_ID)
+platforms = paste0("Platform_", networkData$Primary_Platform)
+devices = paste0("Device_", networkData$Device_Type)
+
+platformEdges = cbind(students, platforms)
+deviceEdges = cbind(students, devices)
+
+edgeList = rbind(platformEdges, deviceEdges)
+
+g = graph_from_edgelist(
+  edgeList,
+  directed = FALSE
+)
+
+print(g)
+
+V(g)$group = "Student"
+V(g)$group[grepl("^Platform_", V(g)$name)] = "Platform"
+V(g)$group[grepl("^Device_", V(g)$name)] = "Device"
+
+V(g)$color = "grey70"
+V(g)$color[V(g)$group == "Platform"] = "steelblue"
+V(g)$color[V(g)$group == "Device"] = "darkgreen"
+
+V(g)$size = 1.5
+V(g)$size[V(g)$group != "Student"] = 12
+
+V(g)$label = sub(
+  "^(Platform_|Device_)",
+  "",
+  V(g)$name
+)
+
+V(g)$label[V(g)$group == "Student"] = NA
+```
+
+We calculated the number of nodes and edges, density, connected components and the degree distribution.
+
+```{r network-analysis, echo=FALSE, results='hide'}
+
+graphComponents = components(g)
+
+data.frame(
+  Nodes = vcount(g),
+  Edges = ecount(g),
+  Density = edge_density(g),
+  Components = graphComponents$no,
+  Largest_component = max(graphComponents$csize)
+)
+
+nodeDegree = degree(g)
+table(nodeDegree)
+
+nodeBetweenness = betweenness(g)
+
+centralityTable = data.frame(
+  Node = V(g)$name,
+  Group = V(g)$group,
+  Degree = as.numeric(nodeDegree),
+  Betweenness = as.numeric(nodeBetweenness)
+)
+
+categoryCentrality = centralityTable[
+  centralityTable$Group != "Student",
+]
+
+categoryCentrality$Node = sub(
+  "^(Platform_|Device_)",
+  "",
+  categoryCentrality$Node
+)
+
+degreeResults = categoryCentrality[
+  order(categoryCentrality$Degree, decreasing = TRUE),
+]
+
+degreeResults[, c("Node", "Group", "Degree")]
+
+betweennessResults = categoryCentrality[
+  order(categoryCentrality$Betweenness, decreasing = TRUE),
+]
+
+betweennessResults$Betweenness = round(
+  betweennessResults$Betweenness,
+  2
+)
+
+betweennessResults[, c("Node", "Group", "Betweenness")]
+```
+
+The network contained 4510 nodes and 9000 edges representing 4500 students, 7 platforms and 3 devices. There was one connected component which contained every node. The density was approximately 0.000885. This low density partly reflects the network design as connections between students and between category nodes were not included.
+
+```{r full-network-plot, echo=FALSE, fig.width=9, fig.height=7}
+set.seed(3020)
+
+plot(
+  g,
+  layout = layout_with_fr(g),
+  vertex.frame.color = NA,
+  vertex.label.cex = 0.7,
+  vertex.label.color = "black",
+  edge.color = adjustcolor("grey50", alpha.f = 0.15),
+  edge.width = 0.4,
+  main = "Student Platform and Device Network"
+)
+
+legend(
+  "topleft",
+  legend = c("Student", "Platform", "Device"),
+  col = c("grey70", "steelblue", "darkgreen"),
+  pch = 16,
+  bty = "n"
+)
+```
+
+We used the Fruchterman-Reingold layout to demonstrate the full network plot. The students are grey, the platforms are blue and devices are green. Category nodes have a larger fixed size to distinguish them from students however their size does not represent centrality.
+
+The graph shows overall structure although individual connections overlap as thousands of students are included. The node positions are determine by layout and do not represent the profiles which were identfied in the kmeans clustering.
+
+```{r network-subgraph, echo=FALSE, results='hide', fig.width=9, fig.height=7}
+
+combinations = unique(
+  networkData[, c("Primary_Platform", "Device_Type")]
+)
+
+selectedRows = integer(0)
+
+for (i in seq_len(nrow(combinations))) {
+
+  matchingRows = which(
+    networkData$Primary_Platform ==
+      combinations$Primary_Platform[i] &
+    networkData$Device_Type ==
+      combinations$Device_Type[i]
+  )
+
+  selectedRows = c(
+    selectedRows,
+    head(matchingRows, 3)
+  )
+}
+
+selectedNodes = unique(c(
+  students[selectedRows],
+  platforms[selectedRows],
+  devices[selectedRows]
+))
+
+g.sub = induced_subgraph(
+  g,
+  V(g)[name %in% selectedNodes]
+)
+
+V(g.sub)$size[V(g.sub)$group == "Student"] = 4
+
+data.frame(
+  Selected_students = length(selectedRows),
+  Nodes = vcount(g.sub),
+  Edges = ecount(g.sub)
+)
+
+set.seed(3020)
+
+plot(
+  g.sub,
+  layout = layout_with_kk(g.sub),
+  vertex.frame.color = NA,
+  vertex.label.cex = 0.8,
+  vertex.label.color = "black",
+  edge.color = "grey75",
+  main = "Selected Platform and Device Connections"
+)
+
+legend(
+  "topleft",
+  legend = c("Student", "Platform", "Device"),
+  col = c("grey70", "steelblue", "darkgreen"),
+  pch = 16,
+  bty = "n"
+)
+```
+
+To make the graph and individual connections easier to see and inspect. We selected the first 3 available students from each observered platorm-device combination. The subgraph contained 63 students, 73 nodes and 126 edges. 
+
+This selection shows the recorded combinations but does not persevvee their original proportions. It is also dependent on the order of records in the CSV. Centrality measures were therefore calculated used the full network.
+
+The dataset records only on primary platform and device per student so this network does no capture every platform or device they use. The shared categories don't demonstrate that students interact and the shorts paths do not represent observed communication. The finding describe usage affliations within the dataset and cannot establish relationships with mental health or academic performance.
+
+# 3 Conclusion
+
+Our investiation explored students social media usage, sleep, mental health and academnic performance to see whether there was any correlation between these variables. Daily usage averaged approximately 5.3 hours with a handful of students reporting much higher usage. The chi square test found insufficient evidence of an association between the primary social media platform and late night usage.
+
+Kmeans clustering identied thre student profiles, the higher usage profile had shorter average sleep duration, high stress, low mental health index and a low GPA. On the other hand, the lower usage profile showed the opposite patter. These demonstrate the differences between the profiles however do not establish that social media usage caused the outcomes. The network analysis complemetned these finding by showing shared platform and device afflications with the Smartphone and Instagrap being the most commonly recorded categories.
+
+The findings suggest that although we considered several aspects of student behaviour toghether the unclear provenances and analystical choices limit our conclusions. The network repsents usage affliations rather than social interactions and the results should not be generalized to all students. 
